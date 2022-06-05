@@ -1,7 +1,7 @@
 """ Various data munging functions. """
 from typing import Dict, List
 import torch
-from torchvision.ops import masks_to_boxes
+from torchvision.ops import box_area, masks_to_boxes
 
 
 def draw_box_around(tens: torch.Tensor,
@@ -23,3 +23,27 @@ def draw_box_around(tens: torch.Tensor,
         assert masks[i_query].sum() > 0, f'cannot find query {curr_query}'
     boxes = masks_to_boxes(masks)
     return dict(zip(queries, boxes))
+
+
+def target_area_covered(inputs: torch.Tensor,
+                        targets: torch.Tensor) -> torch.Tensor:
+    """
+    Compute fraction of target box that each input box covers.
+
+    Args:
+        inputs:  N x (x1, y1, x2, y2) input box
+        targets: M x (x1, y1, x2, y2) target box
+
+    Returns: M x N fraction of the mth target that the nth input covers
+    """
+    targ_area = box_area(targets)[:, None]  # M x 1
+
+    # intersection area
+    # pylint: disable=no-member
+    lower = torch.max(targets[:, None, :2], inputs[None, :, :2])
+    upper = torch.min(targets[:, None, 2:], inputs[None, :, 2:])
+    # pylint: enable=no-member
+    width_height = (upper - lower).clamp(0)  # M x N x 2
+    inter_area = width_height.prod(dim=-1)   # M x N
+
+    return inter_area / targ_area
